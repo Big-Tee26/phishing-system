@@ -1,21 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Angler Phishing URL Detector</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhishGuard: URL Phishing Detector</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--text:#1b2230;--muted:#667085;--line:#e3e7ee;--accent:#2563eb;
+--safe:#16a34a;--warn:#d97706;--bad:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1420;--card:#171e2e;--text:#e8ecf4;--muted:#98a2b3;--line:#2a3347;--accent:#4f8cff}}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;justify-content:center;padding:32px 16px}
+main{width:100%;max-width:640px}
+h1{margin:0 0 6px;font-size:1.8rem}
+.sub{color:var(--muted);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;margin-bottom:16px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;padding:13px 14px;font-size:1rem;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+button.scan{padding:13px 22px;font-size:1rem;font-weight:600;border:0;border-radius:10px;background:var(--accent);color:#fff;cursor:pointer}
+button.scan:disabled{opacity:.6;cursor:wait}
+.chips{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--muted);font-size:.85rem}
+.chip{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:.85rem}
+#result{display:none}
+.badge{display:inline-block;padding:6px 14px;border-radius:999px;color:#fff;font-weight:700;letter-spacing:.3px}
+.safe{background:var(--safe)}.suspicious{background:var(--warn)}.phishing{background:var(--bad)}
+.url{margin:12px 0;word-break:break-all;color:var(--muted);font-size:.9rem}
+.meter{height:12px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0 4px}
+.meter div{height:100%;width:0;transition:width .5s}
+.pct{font-size:.9rem;color:var(--muted)}
+h3{margin:18px 0 8px;font-size:1rem}
+ul{margin:0;padding-left:20px;line-height:1.7}
+.err{color:var(--bad);margin-top:10px;display:none}
+footer{color:var(--muted);font-size:.8rem;text-align:center;margin-top:8px}
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>Angler Phishing URL Detector</h1>
-        <form action="/predict" method="POST">
-            <div class="form-group">
-                <label for="url">Enter URL:</label>
-                <input type="text" id="url" name="url" required>
-            </div>
-            <button type="submit">Predict</button>
-        </form>
+<main>
+  <h1>PhishGuard</h1>
+  <p class="sub">Paste a link before you click it. We check it for phishing signs.</p>
+
+  <div class="card">
+    <div class="row">
+      <input id="url" type="text" placeholder="https://example.com/login" autocomplete="off">
+      <button class="scan" id="scan">Scan</button>
     </div>
+    <div class="chips">Try:
+      <button class="chip" data-u="https://www.google.com/">google.com</button>
+      <button class="chip" data-u="http://paypal-verify-login.secure-update.xyz/account/confirm">fake PayPal</button>
+      <button class="chip" data-u="http://192.168.4.7/bank/signin.php">IP address login</button>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div class="card" id="result">
+    <span class="badge" id="badge"></span>
+    <div class="url" id="shown"></div>
+    <div class="pct">Phishing likelihood: <strong id="pct"></strong></div>
+    <div class="meter"><div id="bar"></div></div>
+    <h3>Why</h3>
+    <ul id="flags"></ul>
+  </div>
+
+  <footer>This tool gives an estimate, not a guarantee. When unsure, do not enter passwords or payment details.</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const COLORS = {safe:'var(--safe)', suspicious:'var(--warn)', phishing:'var(--bad)'};
+const LABELS = {safe:'Looks safe', suspicious:'Suspicious', phishing:'Likely phishing'};
+
+async function scan(){
+  const url = $('url').value.trim();
+  $('err').style.display = 'none';
+  if(!url){ return showErr('Please enter a URL.'); }
+  $('scan').disabled = true; $('scan').textContent = 'Scanning...';
+  try{
+    const r = await fetch('/api/predict', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url})});
+    const d = await r.json();
+    if(!r.ok){ return showErr(d.error || 'Something went wrong.'); }
+    render(d);
+  }catch(e){ showErr('Could not reach the server.'); }
+  finally{ $('scan').disabled = false; $('scan').textContent = 'Scan'; }
+}
+
+function render(d){
+  $('result').style.display = 'block';
+  $('badge').textContent = LABELS[d.verdict];
+  $('badge').className = 'badge ' + d.verdict;
+  $('shown').textContent = d.url;
+  $('pct').textContent = d.phishing_probability + '%';
+  $('bar').style.width = d.phishing_probability + '%';
+  $('bar').style.background = COLORS[d.verdict];
+  const ul = $('flags'); ul.textContent = '';
+  const items = d.flags.length ? d.flags : ['No common red flags found in the URL structure.'];
+  items.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+}
+
+function showErr(m){ $('err').textContent = m; $('err').style.display = 'block'; }
+
+$('scan').addEventListener('click', scan);
+$('url').addEventListener('keydown', e => { if(e.key === 'Enter') scan(); });
+document.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => { $('url').value = c.dataset.u; scan(); }));
+</script>
 </body>
 </html>
