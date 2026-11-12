@@ -30,6 +30,7 @@ button.scan:disabled{opacity:.6;cursor:wait}
 .pct{font-size:.9rem;color:var(--muted)}
 h3{margin:18px 0 8px;font-size:1rem}
 ul{margin:0;padding-left:20px;line-height:1.7}
+.note{margin:10px 0;color:var(--text);font-size:.95rem}
 .err{color:var(--bad);margin-top:10px;display:none}
 footer{color:var(--muted);font-size:.8rem;text-align:center;margin-top:8px}
 </style>
@@ -55,9 +56,12 @@ footer{color:var(--muted);font-size:.8rem;text-align:center;margin-top:8px}
   <div class="card" id="result">
     <span class="badge" id="badge"></span>
     <div class="url" id="shown"></div>
-    <div class="pct">Phishing likelihood: <strong id="pct"></strong></div>
-    <div class="meter"><div id="bar"></div></div>
-    <h3>Why</h3>
+    <div class="note" id="note"></div>
+    <div id="scorebox">
+      <div class="pct">Phishing likelihood: <strong id="pct"></strong></div>
+      <div class="meter"><div id="bar"></div></div>
+    </div>
+    <h3 id="whyh">Why</h3>
     <ul id="flags"></ul>
   </div>
 
@@ -88,6 +92,9 @@ function render(d){
   $('badge').textContent = LABELS[d.verdict];
   $('badge').className = 'badge ' + d.verdict;
   $('shown').textContent = d.url;
+  $('note').textContent = d.note || '';
+  $('scorebox').style.display = d.trusted ? 'none' : 'block';
+  $('whyh').textContent = d.trusted ? 'Red flags' : 'Why';
   $('pct').textContent = d.phishing_probability + '%';
   $('bar').style.width = d.phishing_probability + '%';
   $('bar').style.background = COLORS[d.verdict];
